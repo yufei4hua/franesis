@@ -1,6 +1,6 @@
 [workspace]
 authors = ["yufei4hua <michael4hua@gmail.com>"]
-channels = ["conda-forge"]
+channels = ["pytorch", "nvidia", "conda-forge"]
 name = "franesis"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -11,11 +11,8 @@ version = "0.1.0"
 python = "==3.11"
 pip = ">=25.1.1,<26"
 numpy = "==1.26.4"
-pytorch = "*"
-matplotlib = ">=3.10.3,<4"
-jupyter = ">=1.1.1,<2"
-ipywidgets = ">=8.1.5,<9"
-toml = ">=0.10.2,<0.11"
+matplotlib = "*"
+toml = ">=0.10.2"
 openblas = ">=0.3.30,<0.4"
 ruff = "*"
 pyopengl = "*"
@@ -24,6 +21,7 @@ pinocchio = "*"
 [pypi-dependencies]
 PyOpenGL_accelerate = "*"
 genesis-world = "*"
+torch = "*"
 
 [pypi-options.dependency-overrides]
 pillow = ">=9.2.0"
