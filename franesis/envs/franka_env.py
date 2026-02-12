@@ -10,7 +10,7 @@ from franesis.envs.franka_core import FrankaCore
 
 
 class FrankaEnv(FrankaCore):
-    def __init__(self, episode_length_s: float = 5.0, freq: int = 100, render: bool = True, device: str = "cuda"):
+    def __init__(self, episode_length_s: float = 10.0, freq: int = 100, render: bool = True, device: str = "cuda"):
         super().__init__(num_envs=1, freq=freq, render=render, device=device)
         self.max_episode_length = math.ceil(episode_length_s / self.ctrl_dt)
 
@@ -23,11 +23,14 @@ class FrankaEnv(FrankaCore):
         self._reset_home(mask)
 
     def obs(self) -> tuple[torch.Tensor, dict]:
+        ee_pos, ee_quat = self._get_ee_pose()
         obs_dict = {
             "q": self._get_q(),
             "dq": self._get_dq(),
             "tau_ext": self._get_tau_ext(),
             "F_ext": self._get_ee_F_ext(),
+            "ee_pos": ee_pos,
+            "ee_quat": ee_quat,
         }
         return obs_dict
 
@@ -38,8 +41,7 @@ class FrankaEnv(FrankaCore):
         return self.steps > self.max_episode_length
 
     def info(self) -> dict:
-        ee_pos, ee_quat = self._get_ee_pose()
-        info_dict = {"ee_pos": ee_pos, "ee_quat": ee_quat, "ee_jacobian": self._get_jacobian_ee()}
+        info_dict = {"ee_jacobian": self._get_jacobian_ee()}
         return info_dict
 
     def reset(self) -> tuple[torch.Tensor, dict]:

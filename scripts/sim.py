@@ -3,7 +3,7 @@
 import genesis as gs  # noqa: F401
 import numpy as np
 
-from franesis.control.impedance import CartesianImpedanceController
+from franesis.control.impedance_controller import CartesianImpedanceController
 from franesis.envs.franka_env import FrankaEnv
 
 
@@ -19,8 +19,6 @@ def main():
         obs, _, done, info = env.step(action)
         print("step:", env.steps[0].item())
         for k, v in obs.items():
-            print(f"{k}: {v}")
-        for k, v in info.items():
             print(f"{k}: {v}")
         print("done:", done)
 
