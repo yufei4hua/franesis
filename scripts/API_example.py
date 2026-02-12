@@ -189,9 +189,7 @@ def main():
     #### 3.4 Add the Franka robot from MJCF file ####
     # file path:
     #   Change "xml/franka_emika_panda/panda.xml" to your own path if needed.
-    franka = scene.add_entity(
-        gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"),
-    )
+    franka = scene.add_entity(gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"))
 
     #### 3.5 Build the scene ####
     # This compiles the simulation and prepares all internal data structures.
