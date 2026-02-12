@@ -2,17 +2,19 @@
 
 import genesis as gs
 import torch
+from genesis.utils.geom import transform_by_quat
 
 
 class FrankaCore:
     def __init__(
-        self, num_envs: int, episode_length_s: float = 3.0, freq: int = 100, render: bool = False, device: str = "cpu"
+        self, num_envs: int, freq: int = 100, render: bool = False, ee_name: str = "tool_tip", device: str = "cpu"
     ) -> None:
         self._device = device
         self.num_envs = num_envs
         self.device = gs.device
         self.ctrl_dt = 1.0 / freq
         self.render = render
+        self.ee_name = ee_name
         self.steps = torch.zeros((self.num_envs,), device=self._device, dtype=torch.int32)
 
         gs.init(backend=gs.gpu)
@@ -61,6 +63,7 @@ class FrankaCore:
         self._default_gripper_q = [0.04, 0.04]
         self._init_indices()
         self._set_pd_gains()
+        self.applied_force = torch.zeros((self.num_envs, self.robot.n_dofs), device=self._device, dtype=gs.tc_float)
 
     def _init_indices(self):
         self._arm_dof_dim = min(7, self.robot.n_dofs)
@@ -73,18 +76,14 @@ class FrankaCore:
         self._arm_dof_idx = torch.arange(self._arm_dof_dim, device=self._device)
         self._fingers_dof = torch.arange(self._arm_dof_dim, self._arm_dof_dim + self._gripper_dim, device=self._device)
 
-        self._ee_link = self.robot.get_link("attachment")
+        self._ee_link = self.robot.get_link(self.ee_name)
 
     def _set_pd_gains(self):
-        kp_arm = [4500, 4500, 3500, 3500, 2000, 2000, 2000]
-        kv_arm = [450, 450, 350, 350, 200, 200, 200]
-        fr_min_arm = [-87, -87, -87, -87, -12, -12, -12]
-        fr_max_arm = [87, 87, 87, 87, 12, 12, 12]
+        kp = [0]*self.robot.n_dofs
+        kv = [0]*self.robot.n_dofs
 
-        kp = kp_arm + ([100] * self._gripper_dim)
-        kv = kv_arm + ([10] * self._gripper_dim)
-        fr_min = fr_min_arm + ([-100] * self._gripper_dim)
-        fr_max = fr_max_arm + ([100] * self._gripper_dim)
+        fr_min = [-87, -87, -87, -87, -12, -12, -12] + ([-100]*self._gripper_dim)
+        fr_max = [87, 87, 87, 87, 12, 12, 12] + ([100]*self._gripper_dim)
 
         self.robot.set_dofs_kp(torch.tensor(kp, dtype=gs.tc_float, device=self._device))
         self.robot.set_dofs_kv(torch.tensor(kv, dtype=gs.tc_float, device=self._device))
@@ -106,6 +105,7 @@ class FrankaCore:
         full_tau = torch.zeros((self.num_envs, self.robot.n_dofs), device=self._device, dtype=gs.tc_float)
         full_tau[:, : self._arm_dof_dim] = tau
         full_tau[:, self._fingers_dof] = 0.0
+        self.applied_force = full_tau
         self.robot.control_dofs_force(force=full_tau)
 
     def _get_q(self) -> torch.Tensor:
@@ -119,3 +119,73 @@ class FrankaCore:
 
     def _get_jacobian_ee(self) -> torch.Tensor:
         return self.robot.get_jacobian(link=self._ee_link)
+
+    def _get_ee_F_ext(self) -> torch.Tensor:
+        B = self.num_envs
+        F_ext = torch.zeros((B, 6), device=self._device, dtype=gs.tc_float)
+
+        for b in range(B):
+            Fw, Tw, _, _, _ = self.get_cylinder_contact_wrench("sensor")
+            F_ext[b, :3] = Fw
+            F_ext[b, 3:] = Tw
+
+        return F_ext
+    
+    def _get_tau_ext(self) -> torch.Tensor:
+        J = self._get_jacobian_ee()  # (B, 6, n_dofs)
+        F_ext = self._get_ee_F_ext()  # (B, 6)
+        tau_ext = torch.bmm(J.transpose(1, 2), F_ext.unsqueeze(-1)).squeeze(-1)  # (B, n_dofs)
+        return tau_ext
+
+    def get_cylinder_contact_wrench(
+        self, paddle_link_name: str = "sensor"
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]:
+        """
+        Link-based contact wrench extraction (no geom / idx_global dependency).
+
+        We only integrate contacts where one side is the link named `paddle_link_name`.
+        Returns:
+            F_world: (3,) net force in world frame
+            T_world: (3,) net torque in world frame about link origin
+            F_local: (3,) net force in link local frame
+            T_local: (3,) net torque in link local frame
+            n_contacts: int, number of contributing contact points
+        """
+        # Get the link and its indices
+        link_paddle = self.robot.get_link(paddle_link_name)
+        link_idx_local = link_paddle.idx_local
+        link_idx_global = self.robot.link_start + link_idx_local
+
+        # Link pose in world frame
+        p_link = link_paddle.get_pos().squeeze()  # [3]
+        q_link = link_paddle.get_quat().squeeze()  # [4] (x, y, z, w)
+        q_inv = torch.tensor([-q_link[0], -q_link[1], -q_link[2], q_link[3]], device=gs.device, dtype=gs.tc_float)
+
+        # All contacts involving this robot
+        c = self.robot.get_contacts()
+
+        mask_a = c["link_a"] == link_idx_global
+        mask_b = c["link_b"] == link_idx_global
+
+        Fw = torch.zeros(3, device=gs.device, dtype=gs.tc_float)
+        Tw = torch.zeros(3, device=gs.device, dtype=gs.tc_float)
+
+        # Contacts where this link is on side A
+        if mask_a.any():
+            Fa = c["force_a"][mask_a]  # (na, 3)
+            Pa = c["position"][mask_a]  # (na, 3)
+            Fw += Fa.sum(dim=0)
+            Tw += torch.cross(Pa - p_link, Fa).sum(dim=0)
+
+        # Contacts where this link is on side B
+        if mask_b.any():
+            Fb = c["force_b"][mask_b]
+            Pb = c["position"][mask_b]
+            Fw += Fb.sum(dim=0)
+            Tw += torch.cross(Pb - p_link, Fb).sum(dim=0)
+
+        # NOTE: order is transform_by_quat(vector, quat)
+        Fl = transform_by_quat(Fw, q_inv)
+        Tl = transform_by_quat(Tw, q_inv)
+        n = int(mask_a.sum().item() + mask_b.sum().item())
+        return Fw, Tw, Fl, Tl, n

@@ -15,10 +15,12 @@ def main():
     done = np.zeros(1)
 
     while not done.any():
-        random_tau = 10 * (2.0 * torch.rand(1, action_dim, device=gs.device) - 1.0)
-        obs, _, done, _ = env.step(random_tau)
+        random_tau = 1 * (2.0 * torch.rand(1, action_dim, device=gs.device) - 1.0)
+        obs, _, done, info = env.step(random_tau)
         print("step:", env.steps[0].item())
         for k, v in obs.items():
+            print(f"{k}: {v}")
+        for k, v in info.items():
             print(f"{k}: {v}")
         print("done:", done)
 
