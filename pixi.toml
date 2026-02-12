@@ -11,10 +11,9 @@ version = "0.1.0"
 PYTHONPATH = "$PIXI_PROJECT_ROOT"
 
 [dependencies]
-python = "==3.11"
+python = ">=3.11"
 pip = ">=25.1.1,<26"
 numpy = "==1.26.4"
-# matplotlib = "*"
 toml = ">=0.10.2"
 openblas = ">=0.3.30,<0.4"
 ruff = "*"
@@ -26,6 +25,7 @@ eigenpy = ">=3,<4"
 PyOpenGL_accelerate = "*"
 genesis-world = "*"
 torch = "*"
+matplotlib = "*"
 
 [pypi-options.dependency-overrides]
 pillow = ">=9.2.0"
