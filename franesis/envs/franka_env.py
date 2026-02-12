@@ -4,6 +4,7 @@ import math
 
 import genesis as gs
 import torch
+from numpy.typing import NDArray
 
 from franesis.envs.franka_core import FrankaCore
 
@@ -38,23 +39,23 @@ class FrankaEnv(FrankaCore):
 
     def info(self) -> dict:
         ee_pos, ee_quat = self._get_ee_pose()
-        info_dict = {
-            "ee_pos": ee_pos,
-            "ee_quat": ee_quat,
-            "ee_jacobian": self._get_jacobian_ee(),
-        }
+        info_dict = {"ee_pos": ee_pos, "ee_quat": ee_quat, "ee_jacobian": self._get_jacobian_ee()}
         return info_dict
 
     def reset(self) -> tuple[torch.Tensor, dict]:
         self._reset(torch.arange(self.num_envs, device=gs.device))
-        init_info = self.info()
-        return self.obs(), init_info
+        obs = self.obs()
+        obs = {k: v.cpu().numpy()[0] for k, v in obs.items()}
+        info = self.info()
+        info = {k: v.cpu().numpy()[0] for k, v in info.items()}
+        return obs, info
 
-    def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+    def step(self, actions: torch.Tensor | NDArray) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         # update step count
         self.steps += 1
 
         # apply actions and step simulation
+        actions = torch.tensor(actions, dtype=gs.tc_float, device=self._device)
         self._apply_force(actions)
         self.scene.step()
 

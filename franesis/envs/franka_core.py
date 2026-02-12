@@ -79,11 +79,11 @@ class FrankaCore:
         self._ee_link = self.robot.get_link(self.ee_name)
 
     def _set_pd_gains(self):
-        kp = [0]*self.robot.n_dofs
-        kv = [0]*self.robot.n_dofs
+        kp = [0] * self.robot.n_dofs
+        kv = [0] * self.robot.n_dofs
 
-        fr_min = [-87, -87, -87, -87, -12, -12, -12] + ([-100]*self._gripper_dim)
-        fr_max = [87, 87, 87, 87, 12, 12, 12] + ([100]*self._gripper_dim)
+        fr_min = [-87, -87, -87, -87, -12, -12, -12] + ([-100] * self._gripper_dim)
+        fr_max = [87, 87, 87, 87, 12, 12, 12] + ([100] * self._gripper_dim)
 
         self.robot.set_dofs_kp(torch.tensor(kp, dtype=gs.tc_float, device=self._device))
         self.robot.set_dofs_kv(torch.tensor(kv, dtype=gs.tc_float, device=self._device))
@@ -130,7 +130,7 @@ class FrankaCore:
             F_ext[b, 3:] = Tw
 
         return F_ext
-    
+
     def _get_tau_ext(self) -> torch.Tensor:
         J = self._get_jacobian_ee()  # (B, 6, n_dofs)
         F_ext = self._get_ee_F_ext()  # (B, 6)
