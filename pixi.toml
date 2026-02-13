@@ -26,6 +26,7 @@ PyOpenGL_accelerate = "*"
 genesis-world = "*"
 torch = "*"
 matplotlib = "*"
+fire = ">=0.6.0"
 
 [pypi-options.dependency-overrides]
 pillow = ">=9.2.0"
