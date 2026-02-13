@@ -19,6 +19,7 @@ class CartesianImpedanceController:
         Args:
             obs: The initial observation of the environment's state
             info: Additional environment information from the reset.
+            freq: Control frequency in Hz.
         """
         self.freq = freq
         self.dt = 1.0 / freq
@@ -27,8 +28,8 @@ class CartesianImpedanceController:
         self.eval_recorder = EvalRecorder()
 
         # 1. stiffness and damping gains
-        self.kp = np.array([800.0] * 3 + [50.0] * 3)  # position stiffness
-        self.kd = np.array([50.0] * 3 + [10.0] * 3)  # velocity damping
+        self.kp = np.array([800.0] * 3 + [32.0] * 3)  # position stiffness
+        self.kd = np.array([80.0] * 3 + [16.0] * 3)  # velocity damping
         # 2. import robot model with Pinocchio for kinematics/dynamics computations
         self.mjcf_path = info.get("mjcf_path", "franesis/envs/franka_emika_panda/panda_cylinder.xml")
         self.mjcf_path = os.path.abspath(self.mjcf_path)
@@ -70,12 +71,11 @@ class CartesianImpedanceController:
         """Compute the next desired collective thrust and roll/pitch/yaw of the drone.
 
         Args:
-            obs: The current observation of the environment. See the environment's observation space
-                for details.
+            obs: The current observation of the environment.
             info: Optional additional information as a dictionary.
 
         Returns:
-            The collective thrust and orientation [t_des, r_des, p_des, y_des] as a numpy array.
+            The desired joint torques as a numpy array.
         """
         # 1. prepare data
         q = obs["q"]
@@ -107,7 +107,7 @@ class CartesianImpedanceController:
         # 3. cartesian impedance control law
         R_act = R.from_quat(quat).as_matrix()
         R_des = R.from_quat(self.quat_des).as_matrix()
-        R_delta = R_act.T @ R_des
+        R_delta = R_act.T @ R_des # compute SO(3) error
         eR = R.from_matrix(R_delta).as_rotvec()
         eR = R_act.T @ eR  # convert to world frame
 
@@ -121,11 +121,7 @@ class CartesianImpedanceController:
     def step_callback(
         self, action: NDArray[np.floating], obs: dict[str, NDArray[np.floating]], reward: float, done: bool, info: dict
     ):
-        """Increment the time step counter.
-
-        Returns:
-            True if the controller is finished, False otherwise.
-        """
+        """Record data and increment step counter."""
         # Record data with batch dimension (1, dim)
         idx = min(self.steps, self.trajectory.shape[0] - 1)
         position = obs["ee_pos"].copy()
@@ -140,6 +136,6 @@ class CartesianImpedanceController:
         self.steps += 1
 
     def episode_callback(self):
-        """Reset the internal state."""
+        """Plot data."""
         self.steps = 0
         self.eval_recorder.plot_eval(save_path="impedance_plot.png")
