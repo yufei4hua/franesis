@@ -10,7 +10,7 @@ from franesis.envs.franka_core import FrankaCore
 
 
 class FrankaEnv(FrankaCore):
-    def __init__(self, episode_length_s: float = 10.0, freq: int = 100, render: bool = True, device: str = "cuda"):
+    def __init__(self, episode_length_s: float = 5.0, freq: int = 100, render: bool = True, device: str = "cuda"):
         super().__init__(num_envs=1, freq=freq, render=render, device=device)
         self.max_episode_length = math.ceil(episode_length_s / self.ctrl_dt)
 
