@@ -7,11 +7,18 @@ from genesis.utils.geom import transform_by_quat
 
 class FrankaCore:
     def __init__(
-        self, num_envs: int, freq: int = 100, render: bool = False, ee_name: str = "tool_tip", device: str = "cpu"
+        self,
+        num_envs: int,
+        freq: int = 100,
+        substeps: int = 10,
+        render: bool = False,
+        ee_name: str = "tool_tip",
+        device: str = "cpu",
     ) -> None:
         self._device = device
         self.num_envs = num_envs
         self.device = gs.device
+        self.freq = freq
         self.ctrl_dt = 1.0 / freq
         self.render = render
         self.ee_name = ee_name
@@ -21,14 +28,20 @@ class FrankaCore:
 
         # 1. setup scene
         self.scene = gs.Scene(
-            sim_options=gs.options.SimOptions(dt=self.ctrl_dt, substeps=2),
+            sim_options=gs.options.SimOptions(dt=self.ctrl_dt, substeps=substeps),
             rigid_options=gs.options.RigidOptions(
                 dt=self.ctrl_dt,
                 constraint_solver=gs.constraint_solver.Newton,
                 enable_collision=True,
                 enable_joint_limit=True,
+                constraint_timeconst=0.15,
+                iterations=100,
+                noslip_iterations=0,
             ),
-            vis_options=gs.options.VisOptions(rendered_envs_idx=list(range(self.num_envs))),
+            vis_options=gs.options.VisOptions(
+                rendered_envs_idx=list(range(self.num_envs)),
+                contact_force_scale=0.01,  # m/N
+            ),
             viewer_options=gs.options.ViewerOptions(
                 max_FPS=int(0.5 / self.ctrl_dt),
                 camera_pos=(2.0, 0.0, 2.5),
@@ -43,19 +56,14 @@ class FrankaCore:
         self.scene.add_entity(gs.morphs.URDF(file="urdf/plane/plane.urdf", fixed=True))
 
         # 3. add Franka robot
-        material = gs.materials.Rigid()
+        material = gs.materials.Rigid(friction=0.02, coup_softness=0.02, coup_restitution=0.0)
         morph = gs.morphs.MJCF(
             file="franesis/envs/franka_emika_panda/panda_cylinder.xml", pos=(0.0, 0.0, 0.0), quat=(1.0, 0.0, 0.0, 0.0)
         )
         self.robot: gs.Entity = self.scene.add_entity(material=material, morph=morph)
+        self._add_task_entities()
 
-        # 4. setup cameras
-        if self.render:
-            self.vis_cam = self.scene.add_camera(
-                res=(1280, 720), pos=(1.5, 0.0, 0.2), lookat=(0.0, 0.0, 0.2), fov=60, GUI=self.render, debug=True
-            )
-
-        # 5. build scene
+        # 4. build scene
         self.scene.build(n_envs=self.num_envs)
 
         # setup indices and controller pd gains (must be called after scene.build)
@@ -77,6 +85,9 @@ class FrankaCore:
         self._fingers_dof = torch.arange(self._arm_dof_dim, self._arm_dof_dim + self._gripper_dim, device=self._device)
 
         self._ee_link = self.robot.get_link(self.ee_name)
+
+    def _add_task_entities(self):
+        pass
 
     def _set_pd_gains(self):
         kp = [0] * self.robot.n_dofs
@@ -125,7 +136,7 @@ class FrankaCore:
         F_ext = torch.zeros((B, 6), device=self._device, dtype=gs.tc_float)
 
         for b in range(B):
-            Fw, Tw, _, _, _ = self.get_cylinder_contact_wrench("sensor")
+            Fw, Tw, _, _, _ = self._get_cylinder_contact_wrench("sensor")
             F_ext[b, :3] = Fw
             F_ext[b, 3:] = Tw
 
@@ -137,7 +148,7 @@ class FrankaCore:
         tau_ext = torch.bmm(J.transpose(1, 2), F_ext.unsqueeze(-1)).squeeze(-1)  # (B, n_dofs)
         return tau_ext
 
-    def get_cylinder_contact_wrench(
+    def _get_cylinder_contact_wrench(
         self, paddle_link_name: str = "sensor"
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]:
         """

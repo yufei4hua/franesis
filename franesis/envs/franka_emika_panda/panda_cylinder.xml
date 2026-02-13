@@ -191,7 +191,7 @@
                       <body name="sensor" pos="0 0 0.05" quat="1 0 0 0">
                         <geom
                           name="sensor_geom"
-                          type="cylinder"
+                          type="capsule"
                           size="0.01 0.055"
                           rgba="0.2 0.6 0.9 1"
                           density="700"

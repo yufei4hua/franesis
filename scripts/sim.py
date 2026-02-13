@@ -4,22 +4,42 @@ import fire
 import genesis as gs  # noqa: F401
 import numpy as np
 
+from franesis.control.force_motion_controller import ForceMotionController
+from franesis.control.HIFC_controller import HIFCController
 from franesis.control.impedance_controller import CartesianImpedanceController
+from franesis.envs.franka_box_env import FrankaBoxEnv
 from franesis.envs.franka_env import FrankaEnv
+from franesis.envs.franka_sphere_env import FrankaSphereEnv
+from franesis.envs.franka_surface_env import FrankaSurfaceEnv
 
 
-def main(controller: str = "impedance", n_runs: int = 1, render: bool = True):
+def main(environment: str = "default", controller: str = "impedance", n_runs: int = 1, render: bool = True):
     match controller:
         case "impedance":
             controller_cls = CartesianImpedanceController
+        case "force_motion":
+            controller_cls = ForceMotionController
+        case "hifc":
+            controller_cls = HIFCController
         case _:
             raise ValueError(f"Unsupported controller: {controller}")
 
-    env = FrankaEnv(render=render)
+    match environment:
+        case "default":
+            env_cls = FrankaEnv
+        case "box":
+            env_cls = FrankaBoxEnv
+        case "surface":
+            env_cls = FrankaSurfaceEnv
+        case "sphere":
+            env_cls = FrankaSphereEnv
+        case _:
+            raise ValueError(f"Unsupported environment: {environment}")
 
+    env = env_cls(render=render)
     for ep in range(n_runs):
         obs, info = env.reset()
-        controller = controller_cls(obs=obs, info=info)
+        controller = controller_cls(obs=obs, info=info, freq=env.freq)
 
         done = np.zeros(1)
         while not done.any():
@@ -27,9 +47,9 @@ def main(controller: str = "impedance", n_runs: int = 1, render: bool = True):
             obs, _, done, info = env.step(action)
             controller.step_callback(action, obs, 0.0, done, info)
             print("step:", env.steps[0].item())
-            for k, v in obs.items():
-                print(f"{k}: {v}")
-            print("done:", done)
+            # for k, v in obs.items():
+            #     print(f"{k}: {v}")
+            # print("done:", done)
 
     controller.episode_callback()
 
