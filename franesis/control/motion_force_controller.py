@@ -13,7 +13,7 @@ from franesis.utils.utils import EvalRecorder
 class MotionForceController:
     """Example of a controller using the collective thrust and attitude interface."""
 
-    def __init__(self, obs: dict[str, NDArray[np.floating]], info: dict, freq: int = 100, scene=None):
+    def __init__(self, obs: dict[str, NDArray[np.floating]], info: dict, freq: int = 100):
         """Initialize the attitude controller.
 
         Args:
@@ -23,7 +23,6 @@ class MotionForceController:
         """
         self.freq = freq
         self.dt = 1.0 / freq
-        self.scene = scene
         self.steps = 0
         # Initialize evaluation recorder
         self.eval_recorder = EvalRecorder()
@@ -164,7 +163,7 @@ class MotionForceController:
 
         self.steps += 1
 
-    def episode_callback(self):
+    def episode_callback(self, exp_name: str = "default_mfc"):
         """Plot data."""
         self.steps = 0
-        self.eval_recorder.plot_eval(save_path="force_motion_plot.png")
+        self.eval_recorder.plot_eval(save_path=f"{exp_name}_plot.png")

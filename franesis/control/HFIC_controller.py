@@ -50,7 +50,7 @@ class HFICController:
         self.q_home = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
         trajectory_center = np.array([0.3, 0.0, 0.3])
         # Figure-8 trajectory
-        num_loops = 1
+        num_loops = 2
         self.trajectory_time = 3.0 * num_loops
         n_steps = int(np.ceil(self.trajectory_time * self.freq))
         t = np.linspace(0, 2 * np.pi * num_loops, n_steps)
@@ -87,8 +87,8 @@ class HFICController:
         pos = obs["ee_pos"]
         quat = obs["ee_quat"]
         J = info["ee_jacobian"]
-        J_force = info.get("ee_jacobian_force", J[..., 2:3, :]) # (1, n)
-        J_motion = info.get("ee_jacobian_motion", np.concatenate([J[..., :2, :], J[..., 3:, :]], axis=-2)) # (5, n)
+        J_force = info.get("ee_jacobian_force", J[..., 2:3, :])  # (1, n)
+        J_motion = info.get("ee_jacobian_motion", np.concatenate([J[..., :2, :], J[..., 3:, :]], axis=-2))  # (5, n)
         U, S, Vt = np.linalg.svd(J)
         J_null = Vt[-1:, :]  # (1, n)
         J_null = J_null / np.linalg.norm(J_null)
@@ -169,7 +169,7 @@ class HFICController:
 
         self.steps += 1
 
-    def episode_callback(self):
+    def episode_callback(self, exp_name: str = "default_hifc"):
         """Plot data."""
         self.steps = 0
-        self.eval_recorder.plot_eval(save_path="force_motion_plot.png")
+        self.eval_recorder.plot_eval(save_path=f"{exp_name}_plot.png")

@@ -140,7 +140,7 @@ class CartesianImpedanceController:
 
         self.steps += 1
 
-    def episode_callback(self):
+    def episode_callback(self, exp_name: str = "default_imp"):
         """Plot data."""
         self.steps = 0
-        self.eval_recorder.plot_eval(save_path="impedance_plot.png")
+        self.eval_recorder.plot_eval(save_path=f"{exp_name}_plot.png")

@@ -11,7 +11,7 @@ from franesis.envs.franka_sphere_env import FrankaSphereEnv
 from franesis.envs.franka_surface_env import FrankaSurfaceEnv
 
 
-def main(environment: str = "default", controller: str = "impedance", n_runs: int = 1, render: bool = True):
+def main(environment: str = "default", controller: str = "imp", n_runs: int = 1, render: bool = True):
     match controller:
         case "imp":
             controller_cls = CartesianImpedanceController
@@ -37,19 +37,19 @@ def main(environment: str = "default", controller: str = "impedance", n_runs: in
     env = env_cls(render=render)
     for ep in range(n_runs):
         obs, info = env.reset()
-        controller = controller_cls(obs=obs, info=info, freq=env.freq)
+        ctrl = controller_cls(obs=obs, info=info, freq=env.freq)
 
         done = np.zeros(1)
         while not done.any():
-            action = controller.compute_control(obs=obs, info=info)
+            action = ctrl.compute_control(obs=obs, info=info)
             obs, _, done, info = env.step(action)
-            controller.step_callback(action, obs, 0.0, done, info)
+            ctrl.step_callback(action, obs, 0.0, done, info)
             print("step:", env.steps[0].item())
             # for k, v in obs.items():
             #     print(f"{k}: {v}")
             # print("done:", done)
 
-    controller.episode_callback()
+    ctrl.episode_callback(exp_name=f"{environment}_{controller}")
 
 
 if __name__ == "__main__":
