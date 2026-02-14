@@ -4,9 +4,7 @@ import fire
 import genesis as gs  # noqa: F401
 import numpy as np
 
-from franesis.control.force_motion_controller import ForceMotionController
-from franesis.control.HIFC_controller import HIFCController
-from franesis.control.impedance_controller import CartesianImpedanceController
+from franesis.control import CartesianImpedanceController, HFICController, MotionForceController
 from franesis.envs.franka_box_env import FrankaBoxEnv
 from franesis.envs.franka_env import FrankaEnv
 from franesis.envs.franka_sphere_env import FrankaSphereEnv
@@ -15,12 +13,12 @@ from franesis.envs.franka_surface_env import FrankaSurfaceEnv
 
 def main(environment: str = "default", controller: str = "impedance", n_runs: int = 1, render: bool = True):
     match controller:
-        case "impedance":
+        case "imp":
             controller_cls = CartesianImpedanceController
-        case "force_motion":
-            controller_cls = ForceMotionController
-        case "hifc":
-            controller_cls = HIFCController
+        case "mfc":
+            controller_cls = MotionForceController
+        case "hfic":
+            controller_cls = HFICController
         case _:
             raise ValueError(f"Unsupported controller: {controller}")
 

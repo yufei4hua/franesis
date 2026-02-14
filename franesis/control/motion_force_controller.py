@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as R
 from franesis.utils.utils import EvalRecorder
 
 
-class ForceMotionController:
+class MotionForceController:
     """Example of a controller using the collective thrust and attitude interface."""
 
     def __init__(self, obs: dict[str, NDArray[np.floating]], info: dict, freq: int = 100, scene=None):
