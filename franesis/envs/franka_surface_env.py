@@ -3,8 +3,10 @@
 import math
 
 import genesis as gs
+import numpy as np
 import torch
 from numpy.typing import NDArray
+from scipy.spatial.transform import Rotation as R
 
 from franesis.envs.franka_core import FrankaCore
 
@@ -18,29 +20,36 @@ class FrankaSurfaceEnv(FrankaCore):
         render: bool = True,
         device: str = "cuda",
     ):
-        super().__init__(num_envs=1, freq=freq, substeps=substeps, render=render, device=device)
+        super().__init__(num_envs=1, freq=freq, substeps=substeps, f_ext_lpf_alpha=0.5, render=render, device=device)
         self.max_episode_length = math.ceil(episode_length_s / self.ctrl_dt)
         self._default_arm_q = [0.13473345, -0.80271834, -0.13701877, -2.83875, -0.12417492, 2.0410793, 0.85577106]
 
     def _add_task_entities(self) -> None:
-        # --- Box dimensions (meters) ---
-        size_x, size_y, size_z = 0.3, 0.5, 0.2
+        # Cylinder parameters
+        radius = 0.6
+        length = 0.4  # cylinder half-length along its axis
 
-        # Center position (0.0, 0.3, 0.1) means it sits on z=0 plane because half height = 0.1
-        box_pos = (0.3, 0.0, 0.2)
+        # Place it in front of robot
+        cyl_pos = (0.3, 0.0, 0.3 - radius)
 
-        # Rigid material with friction
-        box_material = gs.materials.Rigid(friction=0.02, coup_softness=0.02, coup_restitution=0.0)
+        # Rotate cylinder
+        quat_xyzw = R.from_euler("y", 90, degrees=True).as_quat()  # (x,y,z,w)
+        cyl_quat_wxyz = (float(quat_xyzw[3]), float(quat_xyzw[0]), float(quat_xyzw[1]), float(quat_xyzw[2]))
 
-        # Fixed box: baselink fixed => will not be pushed away :contentReference[oaicite:3]{index=3}
-        box_morph = gs.morphs.Box(
-            pos=box_pos, size=(size_x, size_y, size_z), fixed=True, collision=True, visualization=True
+        cyl_material = gs.materials.Rigid(friction=0.02, coup_softness=0.02, coup_restitution=0.0)
+
+        cyl_morph = gs.morphs.Cylinder(
+            pos=cyl_pos,
+            quat=cyl_quat_wxyz,
+            radius=radius,
+            height=length,
+            fixed=True,
+            collision=True,
+            visualization=True,
         )
 
-        # Optional: surface only affects rendering by default; physics is in material
-        box_surface = gs.surfaces.Default()
-
-        self.box: gs.Entity = self.scene.add_entity(material=box_material, morph=box_morph, surface=box_surface)
+        cyl_surface = gs.surfaces.Smooth()
+        self.surface: gs.Entity = self.scene.add_entity(material=cyl_material, morph=cyl_morph, surface=cyl_surface)
 
     def _reset(self, mask: torch.Tensor) -> None:
         if len(mask) == 0:
@@ -97,4 +106,17 @@ class FrankaSurfaceEnv(FrankaCore):
         info = self.info()
         info = {k: v.cpu().numpy()[0] for k, v in info.items()}
 
+        # extra render
+        if self.steps % 2 == 0:
+            self.render_trace(obs, info)
+
         return obs, reward, done, info
+
+    def render_trace(self, obs: dict[str, NDArray[np.floating]], info: dict):
+        if not hasattr(self, "trace"):
+            self.trace = [np.array([0.3, 0.0, 0.3])]
+        new_pos = obs["ee_pos"].copy()
+        new_pos[2] = 0.3  # project to surface
+        self.trace.append(new_pos)
+        hardness = np.abs(obs["F_ext"][2] - 30.0) * 4e-4
+        self.scene.draw_debug_line(self.trace[-2], self.trace[-1], radius=hardness, color=(0.0, 0.0, 0.0, 1.0))

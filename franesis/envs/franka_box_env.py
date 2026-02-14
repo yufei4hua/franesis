@@ -19,7 +19,7 @@ class FrankaBoxEnv(FrankaCore):
         render: bool = True,
         device: str = "cuda",
     ):
-        super().__init__(num_envs=1, freq=freq, substeps=substeps, render=render, device=device)
+        super().__init__(num_envs=1, freq=freq, substeps=substeps, f_ext_lpf_alpha=0.5, render=render, device=device)
         self.max_episode_length = math.ceil(episode_length_s / self.ctrl_dt)
         self._default_arm_q = [0.13473345, -0.80271834, -0.13701877, -2.83875, -0.12417492, 2.0410793, 0.85577106]
 

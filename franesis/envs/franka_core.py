@@ -11,6 +11,7 @@ class FrankaCore:
         num_envs: int,
         freq: int = 100,
         substeps: int = 10,
+        f_ext_lpf_alpha: float = 1.0,
         render: bool = False,
         ee_name: str = "tool_tip",
         device: str = "cpu",
@@ -23,6 +24,7 @@ class FrankaCore:
         self.render = render
         self.ee_name = ee_name
         self.steps = torch.zeros((self.num_envs,), device=self._device, dtype=torch.int32)
+        self.f_ext_lpf_alpha = f_ext_lpf_alpha
 
         gs.init(backend=gs.gpu)
 
@@ -34,7 +36,7 @@ class FrankaCore:
                 constraint_solver=gs.constraint_solver.Newton,
                 enable_collision=True,
                 enable_joint_limit=True,
-                constraint_timeconst=0.15,
+                constraint_timeconst=0.1,
                 iterations=100,
                 noslip_iterations=0,
             ),
@@ -72,6 +74,7 @@ class FrankaCore:
         self._init_indices()
         self._set_pd_gains()
         self.applied_force = torch.zeros((self.num_envs, self.robot.n_dofs), device=self._device, dtype=gs.tc_float)
+        self._f_ext_filtered = torch.zeros((self.num_envs, 6), device=self._device, dtype=gs.tc_float)
 
     def _init_indices(self):
         self._arm_dof_dim = min(7, self.robot.n_dofs)
@@ -111,6 +114,7 @@ class FrankaCore:
             len(mask), 1
         )
         self.robot.set_qpos(q, envs_idx=mask)
+        self._f_ext_filtered[mask] = 0.0
 
     def _apply_force(self, tau: torch.Tensor):
         full_tau = torch.zeros((self.num_envs, self.robot.n_dofs), device=self._device, dtype=gs.tc_float)
@@ -132,15 +136,20 @@ class FrankaCore:
         return self.robot.get_jacobian(link=self._ee_link)
 
     def _get_ee_F_ext(self) -> torch.Tensor:
-        B = self.num_envs
-        F_ext = torch.zeros((B, 6), device=self._device, dtype=gs.tc_float)
+        F_ext_raw = torch.zeros((1, 6), device=self._device, dtype=gs.tc_float)
+        a = self.f_ext_lpf_alpha
 
-        for b in range(B):
-            Fw, Tw, _, _, _ = self._get_cylinder_contact_wrench("sensor")
-            F_ext[b, :3] = Fw
-            F_ext[b, 3:] = Tw
+        Fw, Tw, _, _, _ = self._get_cylinder_contact_wrench("sensor")
+        F_ext_raw[0, :3] = Fw
+        F_ext_raw[0, 3:] = Tw
 
-        return F_ext
+        # omit outliers
+        F_ext_raw = torch.where(F_ext_raw.abs() < 1e-3, (1.0 - a) * self._f_ext_filtered, F_ext_raw)
+
+        # low pass filter
+        self._f_ext_filtered = a * F_ext_raw + (1.0 - a) * self._f_ext_filtered
+
+        return self._f_ext_filtered
 
     def _get_tau_ext(self) -> torch.Tensor:
         J = self._get_jacobian_ee()  # (B, 6, n_dofs)
