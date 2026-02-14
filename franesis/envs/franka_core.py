@@ -130,8 +130,9 @@ class FrankaCore:
         return self.robot.get_dofs_velocity(dofs_idx_local=self._arm_dof_idx)
 
     def _get_ee_pose(self) -> torch.Tensor:
-        return self._ee_link.get_pos(), self._ee_link.get_quat()
-
+        pos, quat = self._ee_link.get_pos(), self._ee_link.get_quat()  # (w, x, y, z)
+        return pos, torch.roll(quat, shifts=-1, dims=-1)  # (x, y, z, w)
+    
     def _get_jacobian_ee(self) -> torch.Tensor:
         return self.robot.get_jacobian(link=self._ee_link)
 
