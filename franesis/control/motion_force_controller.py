@@ -28,8 +28,8 @@ class MotionForceController:
         self.eval_recorder = EvalRecorder()
 
         # 1. stiffness and damping gains
-        self.kp = np.array([1000.0] * 3 + [24.0] * 3)  # position stiffness
-        self.kd = np.array([120.0] * 3 + [10.0] * 3)  # velocity damping
+        self.kp = np.array([1000.0] * 3 + [44.0] * 3)  # position stiffness
+        self.kd = np.array([120.0] * 3 + [20.0] * 3)  # velocity damping
         # nullspace control parameters
         self.kp_null = 100.0
         self.kd_null = 20.0
@@ -48,7 +48,6 @@ class MotionForceController:
 
         # 3. desired setpoint (can be updated online in compute_control)
         self.q_home = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
-        trajectory_center = np.array([0.3, 0.0, 0.3])
         # Figure-8 trajectory
         num_loops = 1
         self.trajectory_time = 3.0 * num_loops
@@ -59,7 +58,7 @@ class MotionForceController:
         x = radius / 2 * np.sin(2 * t)
         y = radius * np.sin(t)
         z = np.zeros_like(t)
-        self.trajectory = np.array([x, y, z]).T + trajectory_center
+        self.trajectory = np.array([x, y, z]).T
         d_x = radius * np.cos(2 * t) * t_dot
         d_y = radius * np.cos(t) * t_dot
         d_z = np.zeros_like(t)
@@ -68,7 +67,7 @@ class MotionForceController:
         dd_y = -radius * np.sin(t) * t_dot**2
         dd_z = np.zeros_like(t)
         self.trajectory_acc = np.array([dd_x, dd_y, dd_z]).T
-        self.quat_des = np.array([0.0, 0.0, -1.0, 0.0])
+        self.quat_des = R.from_euler("xyz", [0, 180, 0], degrees=True).as_quat()
         self.force_des = np.array([0.0, 0.0, -40.0, 0.0, 0.0, 0.0])
 
     def compute_control(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None) -> NDArray[np.floating]:
@@ -84,9 +83,9 @@ class MotionForceController:
         # 1. prepare data
         q = obs["q"]
         dq = obs["dq"]
-        pos = obs["ee_pos"]
-        quat = obs["ee_quat"]
-        J = info["ee_jacobian"]
+        pos = info.get("ee_task_pos", obs["ee_pos"])
+        quat = info.get("ee_task_quat", obs["ee_quat"])
+        J = info.get("ee_jacobian_task", info["ee_jacobian"])
         dx = J @ dq
         idx = min(self.steps, self.trajectory.shape[0] - 1)
         pos_des = self.trajectory[idx]
@@ -122,7 +121,7 @@ class MotionForceController:
         # 4. cartesian impedance control
         R_act = R.from_quat(quat).as_matrix()
         R_des = R.from_quat(self.quat_des).as_matrix()
-        R_delta = R_act.T @ R_des  # compute SO(3) error
+        R_delta = R_des.T @ R_act  # compute SO(3) error
         eR = R.from_matrix(R_delta).as_rotvec()
         eR = R_act.T @ eR  # convert to world frame
 
@@ -146,10 +145,12 @@ class MotionForceController:
     ):
         """Record data and increment step counter."""
         # Record data with batch dimension (1, dim)
+        position = info.get("ee_task_pos", obs["ee_pos"])
+        quat = info.get("ee_task_quat", obs["ee_quat"])
         idx = min(self.steps, self.trajectory.shape[0] - 1)
-        position = obs["ee_pos"].copy()
         goal = self.trajectory[idx].copy()
-        rpy = R.from_quat(obs["ee_quat"]).as_euler("xyz")
+        pry = R.from_quat(quat).as_euler("yxz")
+        rpy = np.array([pry[1], pry[0], pry[2]])
 
         action = info.get("actions", np.zeros((4,)))
         self.eval_recorder.record_step(

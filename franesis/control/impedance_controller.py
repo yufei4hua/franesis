@@ -65,7 +65,7 @@ class CartesianImpedanceController:
         dd_z = np.zeros_like(t)
         self.trajectory_acc = np.array([dd_x, dd_y, dd_z]).T
         self.pos_des = np.array([0.3, 0.0, 0.3])
-        self.quat_des = np.array([0.0, 0.0, -1.0, 0.0])
+        self.quat_des = R.from_euler("xyz", [0, 180, 0], degrees=True).as_quat()
 
     def compute_control(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None) -> NDArray[np.floating]:
         """Compute the next desired collective thrust and roll/pitch/yaw of the drone.
@@ -107,7 +107,7 @@ class CartesianImpedanceController:
         # 3. cartesian impedance control law
         R_act = R.from_quat(quat).as_matrix()
         R_des = R.from_quat(self.quat_des).as_matrix()
-        R_delta = R_act.T @ R_des  # compute SO(3) error
+        R_delta = R_des.T @ R_act  # compute SO(3) error
         eR = R.from_matrix(R_delta).as_rotvec()
         eR = R_act.T @ eR  # convert to world frame
 

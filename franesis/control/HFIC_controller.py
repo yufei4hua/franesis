@@ -28,8 +28,8 @@ class HFICController:
         self.eval_recorder = EvalRecorder()
 
         # 1. stiffness and damping gains
-        self.kp = np.array([1000.0] * 3 + [24.0] * 3)  # position stiffness
-        self.kd = np.array([120.0] * 3 + [10.0] * 3)  # velocity damping
+        self.kp = np.array([800.0] * 3 + [80.0] * 3)  # position stiffness
+        self.kd = np.array([80.0] * 3 + [8.0] * 3)  # velocity damping
         # nullspace control parameters
         self.kp_null = 100.0
         self.kd_null = 20.0
@@ -48,7 +48,6 @@ class HFICController:
 
         # 3. desired setpoint (can be updated online in compute_control)
         self.q_home = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
-        trajectory_center = np.array([0.3, 0.0, 0.3])
         # Figure-8 trajectory
         num_loops = 2
         self.trajectory_time = 3.0 * num_loops
@@ -59,7 +58,7 @@ class HFICController:
         x = radius / 2 * np.sin(2 * t)
         y = radius * np.sin(t)
         z = np.zeros_like(t)
-        self.trajectory = np.array([x, y, z]).T + trajectory_center
+        self.trajectory = np.array([x, y, z]).T
         d_x = radius * np.cos(2 * t) * t_dot
         d_y = radius * np.cos(t) * t_dot
         d_z = np.zeros_like(t)
@@ -68,7 +67,7 @@ class HFICController:
         dd_y = -radius * np.sin(t) * t_dot**2
         dd_z = np.zeros_like(t)
         self.trajectory_acc = np.array([dd_x, dd_y, dd_z]).T
-        self.quat_des = np.array([0.0, 0.0, -1.0, 0.0])
+        self.quat_des = R.from_euler("yxz", [180, 0, 0], degrees=True).as_quat()
         self.force_des = np.array([0.0, 0.0, -40.0, 0.0, 0.0, 0.0])
 
     def compute_control(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None) -> NDArray[np.floating]:
@@ -84,15 +83,13 @@ class HFICController:
         # 1. prepare data
         q = obs["q"]
         dq = obs["dq"]
-        pos = obs["ee_pos"]
-        quat = obs["ee_quat"]
-        J = info["ee_jacobian"]
-        J_force = info.get("ee_jacobian_force", J[..., 2:3, :])  # (1, n)
-        J_motion = info.get("ee_jacobian_motion", np.concatenate([J[..., :2, :], J[..., 3:, :]], axis=-2))  # (5, n)
-        U, S, Vt = np.linalg.svd(J)
-        J_null = Vt[-1:, :]  # (1, n)
-        J_null = J_null / np.linalg.norm(J_null)
-
+        pos = info.get("ee_task_pos", obs["ee_pos"])
+        quat = info.get("ee_task_quat", obs["ee_quat"])
+        J = info.get("ee_jacobian_task", info["ee_jacobian"])
+        J_force = info["ee_jacobian_force"]
+        J_motion = info["ee_jacobian_motion"]
+        J_task = info["ee_jacobian_task"]
+        J_null = info["ee_jacobian_null"]
         dx = J @ dq
         idx = min(self.steps, self.trajectory.shape[0] - 1)
         pos_des = self.trajectory[idx]
@@ -128,22 +125,23 @@ class HFICController:
         # 4. cartesian impedance control
         R_act = R.from_quat(quat).as_matrix()
         R_des = R.from_quat(self.quat_des).as_matrix()
-        R_delta = R_act.T @ R_des  # compute SO(3) error
+        R_delta = R_des.T @ R_act  # compute SO(3) error
         eR = R.from_matrix(R_delta).as_rotvec()
         eR = R_act.T @ eR  # convert to world frame
+        print("eR:", eR)
 
         x_tilde = np.concatenate([pos - pos_des, eR])
         dx_tilde = dx - np.concatenate([vel_des, np.zeros(3)])
         F_imp = -self.kp * x_tilde - self.kd * dx_tilde
         tau_ctrl += J.T @ F_imp
 
-        # 5. force control
-        F_ext = obs["F_ext"]
-        F_des = self.force_des
-        dF_ext = (F_ext - self.last_F_ext) / self.dt
-        self.last_F_ext = F_ext.copy()
-        F_force = F_des + self.kp_force * (F_ext + F_des) - self.kd_force * dF_ext
-        tau_ctrl += J.T @ F_force
+        # # 5. force control
+        # F_ext = obs["F_ext"]
+        # F_des = self.force_des
+        # dF_ext = (F_ext - self.last_F_ext) / self.dt
+        # self.last_F_ext = F_ext.copy()
+        # F_force = F_des + self.kp_force * (F_ext + F_des) - self.kd_force * dF_ext
+        # tau_ctrl += J.T @ F_force
 
         return tau_ctrl
 
@@ -152,10 +150,12 @@ class HFICController:
     ):
         """Record data and increment step counter."""
         # Record data with batch dimension (1, dim)
+        position = info.get("ee_task_pos", obs["ee_pos"])
+        quat = info.get("ee_task_quat", obs["ee_quat"])
         idx = min(self.steps, self.trajectory.shape[0] - 1)
-        position = obs["ee_pos"].copy()
         goal = self.trajectory[idx].copy()
-        rpy = R.from_quat(obs["ee_quat"]).as_euler("xyz")
+        pry = R.from_quat(quat).as_euler("yxz")
+        rpy = np.array([pry[1], pry[0], pry[2]])
 
         action = info.get("actions", np.zeros((4,)))
         self.eval_recorder.record_step(

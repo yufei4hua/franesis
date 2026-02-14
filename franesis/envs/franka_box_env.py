@@ -19,24 +19,20 @@ class FrankaBoxEnv(FrankaCore):
         render: bool = True,
         device: str = "cuda",
     ):
+        # Box parameters
+        self.size = (0.4, 0.6, 0.01)
+        self.center = (0.3, 0.0, 0.3 - self.size[2] / 2)
+
         super().__init__(num_envs=1, freq=freq, substeps=substeps, f_ext_lpf_alpha=0.5, render=render, device=device)
         self.max_episode_length = math.ceil(episode_length_s / self.ctrl_dt)
         self._default_arm_q = [0.13473345, -0.80271834, -0.13701877, -2.83875, -0.12417492, 2.0410793, 0.85577106]
 
     def _add_task_entities(self) -> None:
-        # --- Box dimensions (meters) ---
-        size_x, size_y, size_z = 0.4, 0.6, 0.01
-
-        # Center position (0.0, 0.3, 0.1) means it sits on z=0 plane because half height = 0.1
-        box_pos = (0.3, 0.0, 0.3 - size_z / 2)
-
         # Rigid material with friction
         box_material = gs.materials.Rigid(friction=0.02, coup_softness=0.02, coup_restitution=0.0)
 
         # Fixed box: baselink fixed => will not be pushed away :contentReference[oaicite:3]{index=3}
-        box_morph = gs.morphs.Box(
-            pos=box_pos, size=(size_x, size_y, size_z), fixed=True, collision=True, visualization=True
-        )
+        box_morph = gs.morphs.Box(pos=self.center, size=self.size, fixed=True, collision=True, visualization=True)
 
         # Optional: surface only affects rendering by default; physics is in material
         box_surface = gs.surfaces.Default()
@@ -44,6 +40,29 @@ class FrankaBoxEnv(FrankaCore):
         self.box: gs.Entity = self.scene.add_entity(
             material=box_material, morph=box_morph, surface=box_surface, visualize_contact=True
         )
+
+    @staticmethod
+    def _task_jocobians(
+        center: torch.Tensor, ee_pos: torch.Tensor, ee_quat: torch.Tensor, ee_jacobian: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        x_task_pos = ee_pos - center
+        x_task_quat = ee_quat
+        J = ee_jacobian  # (B, 6, n)
+        J_force = J[..., 2:3, :]  # (B, 1, n)
+        J_motion = torch.cat([J[..., :2, :], J[..., 3:, :]], dim=-2)  # (B, 5, n)
+        J_task = torch.cat([J_motion, J_force], dim=-2)  # (B, 6, n)
+        _, _, Vh = torch.linalg.svd(J_task, full_matrices=True)
+        J_null = Vh[..., -1:, :]  # (B, 1, n)
+        J_null = J_null / torch.linalg.norm(J_null, dim=-1, keepdim=True).clamp_min(1e-12)
+        return {
+            "ee_jacobian": ee_jacobian,
+            "ee_task_pos": x_task_pos,
+            "ee_task_quat": x_task_quat,
+            "ee_jacobian_task": J_task,
+            "ee_jacobian_force": J_force,
+            "ee_jacobian_motion": J_motion,
+            "ee_jacobian_null": J_null,
+        }
 
     def _reset(self, mask: torch.Tensor) -> None:
         if len(mask) == 0:
@@ -72,7 +91,11 @@ class FrankaBoxEnv(FrankaCore):
         return self.steps > self.max_episode_length
 
     def info(self) -> dict:
-        info_dict = {"ee_jacobian": self._get_jacobian_ee()}
+        ee_pos, ee_quat = self._get_ee_pose()
+        ee_jacobian = self._get_jacobian_ee()
+        info_dict = self._task_jocobians(
+            center=torch.tensor(self.center, device=gs.device), ee_pos=ee_pos, ee_quat=ee_quat, ee_jacobian=ee_jacobian
+        )
         return info_dict
 
     def reset(self) -> tuple[torch.Tensor, dict]:
