@@ -14,25 +14,26 @@ class FrankaBoxEnv(FrankaCore):
     def __init__(
         self,
         episode_length_s: float = 3.0,
-        freq: int = 100,
-        substeps: int = 10,
+        freq: int = 200,
+        substeps: int = 2,
         render: bool = True,
         device: str = "cuda",
     ):
         # Box parameters
-        self.size = (0.4, 0.6, 0.01)
-        self.center = (0.3, 0.0, 0.3 - self.size[2] / 2)
+        self.size = (0.4, 0.6, 0.1)
+        self.center = (0.3, 0.0, 0.3)
 
-        super().__init__(num_envs=1, freq=freq, substeps=substeps, f_ext_lpf_alpha=0.5, render=render, device=device)
+        super().__init__(num_envs=1, freq=freq, substeps=substeps, f_ext_lpf_alpha=0.2, render=render, device=device)
         self.max_episode_length = math.ceil(episode_length_s / self.ctrl_dt)
         self._default_arm_q = [0.13473345, -0.80271834, -0.13701877, -2.83875, -0.12417492, 2.0410793, 0.85577106]
 
     def _add_task_entities(self) -> None:
         # Rigid material with friction
-        box_material = gs.materials.Rigid(friction=0.02, coup_softness=0.02, coup_restitution=0.0)
+        box_material = gs.materials.Rigid(friction=0.01, coup_softness=0.02, coup_restitution=0.0)
 
         # Fixed box: baselink fixed => will not be pushed away :contentReference[oaicite:3]{index=3}
-        box_morph = gs.morphs.Box(pos=self.center, size=self.size, fixed=True, collision=True, visualization=True)
+        box_center = (self.center[0], self.center[1], self.center[2] - self.size[2] / 2)
+        box_morph = gs.morphs.Box(pos=box_center, size=self.size, fixed=True, collision=True, visualization=True)
 
         # Optional: surface only affects rendering by default; physics is in material
         box_surface = gs.surfaces.Default()
@@ -135,5 +136,6 @@ class FrankaBoxEnv(FrankaCore):
         new_pos = obs["ee_pos"].copy()
         new_pos[2] = 0.3  # project to surface
         self.trace.append(new_pos)
-        hardness = np.abs(obs["F_ext"][2] - 30.0) * 4e-4
+        F_ext = info.get("ee_task_F_ext", obs["F_ext"])
+        hardness = np.abs(F_ext[2] - 5.0) * 5e-4
         self.scene.draw_debug_line(self.trace[-2], self.trace[-1], radius=hardness, color=(0.0, 0.0, 0.0, 1.0))

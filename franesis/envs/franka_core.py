@@ -39,7 +39,7 @@ class FrankaCore:
                 constraint_timeconst=0.1,
                 use_gjk_collision=True,
                 iterations=100,
-                noslip_iterations=0,
+                noslip_iterations=5,
             ),
             vis_options=gs.options.VisOptions(
                 rendered_envs_idx=list(range(self.num_envs)),
@@ -47,9 +47,9 @@ class FrankaCore:
             ),
             viewer_options=gs.options.ViewerOptions(
                 max_FPS=int(0.5 / self.ctrl_dt),
-                camera_pos=(2.0, 0.0, 2.5),
-                camera_lookat=(0.0, 0.0, 0.5),
-                camera_fov=40,
+                camera_pos=(1.0, 0.0, 1.8),
+                camera_lookat=(0.0, 0.0, 0.0),
+                camera_fov=30,
             ),
             profiling_options=gs.options.ProfilingOptions(show_FPS=False),
             show_viewer=render,
@@ -59,7 +59,7 @@ class FrankaCore:
         self.scene.add_entity(gs.morphs.URDF(file="urdf/plane/plane.urdf", fixed=True))
 
         # 3. add Franka robot
-        material = gs.materials.Rigid(friction=0.02, coup_softness=0.02, coup_restitution=0.0)
+        material = gs.materials.Rigid(friction=0.01, coup_softness=0.02, coup_restitution=0.0)
         morph = gs.morphs.MJCF(
             file="franesis/envs/franka_emika_panda/panda_cylinder.xml", pos=(0.0, 0.0, 0.0), quat=(1.0, 0.0, 0.0, 0.0)
         )

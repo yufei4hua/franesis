@@ -1,6 +1,7 @@
 """Single Franka robot environment for contact tasks."""
 
 import math
+from pathlib import Path
 
 import genesis as gs
 import numpy as np
@@ -9,14 +10,15 @@ from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation as R
 
 from franesis.envs.franka_core import FrankaCore
+from franesis.utils.utils import write_cylinder_obj
 
 
 class FrankaSurfaceEnv(FrankaCore):
     def __init__(
         self,
         episode_length_s: float = 3.0,
-        freq: int = 100,
-        substeps: int = 10,
+        freq: int = 200,
+        substeps: int = 2,
         render: bool = True,
         device: str = "cuda",
     ):
@@ -25,28 +27,34 @@ class FrankaSurfaceEnv(FrankaCore):
         self.length = 0.4
         self.center = (0.3, 0.0, 0.3 - self.radius)
 
-        super().__init__(num_envs=1, freq=freq, substeps=substeps, f_ext_lpf_alpha=0.5, render=render, device=device)
+        super().__init__(num_envs=1, freq=freq, substeps=substeps, f_ext_lpf_alpha=0.2, render=render, device=device)
         self.max_episode_length = math.ceil(episode_length_s / self.ctrl_dt)
         self._default_arm_q = [0.13473345, -0.80271834, -0.13701877, -2.83875, -0.12417492, 2.0410793, 0.85577106]
 
     def _add_task_entities(self) -> None:
-        # Rotate cylinder
         quat_xyzw = R.from_euler("y", 90, degrees=True).as_quat()  # (x,y,z,w)
         cyl_quat_wxyz = (float(quat_xyzw[3]), float(quat_xyzw[0]), float(quat_xyzw[1]), float(quat_xyzw[2]))
 
-        cyl_material = gs.materials.Rigid(friction=0.02, coup_softness=0.02, coup_restitution=0.0)
+        cyl_material = gs.materials.Rigid(friction=0.01, coup_softness=0.02, coup_restitution=0.0)
 
-        cyl_morph = gs.morphs.Cylinder(
+        # 1. generate mesh
+        mesh_dir = Path(Path(__file__).parent / "franka_emika_panda/assets")
+        mesh_path = mesh_dir / f"cyl_r{self.radius:.3f}_h{self.length:.3f}_nt256_nh16.obj"
+        if not mesh_path.exists():
+            write_cylinder_obj(mesh_path, radius=self.radius, height=self.length, n_theta=256, n_h=16, cap=False)
+
+        # 2. use mesh morph
+        cyl_morph = gs.morphs.Mesh(
+            file=str(mesh_path),
             pos=self.center,
             quat=cyl_quat_wxyz,
-            radius=self.radius,
-            height=self.length,
             fixed=True,
             collision=True,
             visualization=True,
+            quality=True,
         )
 
-        cyl_surface = gs.surfaces.Smooth()
+        cyl_surface = gs.surfaces.Default(double_sided=True)
         self.surface: gs.Entity = self.scene.add_entity(material=cyl_material, morph=cyl_morph, surface=cyl_surface)
 
     @staticmethod
@@ -211,5 +219,6 @@ class FrankaSurfaceEnv(FrankaCore):
         new_pos[1:3] = np.array([self.center[1], self.center[2]], dtype=float) + yz * scale
 
         self.trace.append(new_pos)
-        hardness = np.abs(obs["F_ext"][2] - 30.0) * 4e-4
+        F_ext = info.get("ee_task_F_ext", obs["F_ext"])
+        hardness = np.abs(F_ext[2] - 5.0) * 5e-4
         self.scene.draw_debug_line(self.trace[-2], self.trace[-1], radius=hardness, color=(0.0, 0.0, 0.0, 1.0))

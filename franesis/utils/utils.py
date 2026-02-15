@@ -90,6 +90,9 @@ class EvalRecorder:
             axes[4 + i].set_ylabel("Force (N)")
             axes[4 + i].grid(True)
             axes[4 + i].legend(["Force", "Goal"])
+        axes[4 + 0].set_ylim([-2, 2])
+        axes[4 + 1].set_ylim([-2, 2])
+        axes[4 + 2].set_ylim([0, 20])
 
         # Force error
         force_err = np.linalg.norm(force[:, 0] - goal_force[:, 0], axis=1)
@@ -101,11 +104,12 @@ class EvalRecorder:
 
         # Angles
         rpy_labels = ["Roll", "Pitch", "Yaw"]
+        rpy = rpy * 180.0 / np.pi
         for i in range(3):
             axes[8 + i].plot(rpy[:, 0, i])
             axes[8 + i].set_title(f"{rpy_labels[i]} Angle")
             axes[8 + i].set_xlabel("Time Step")
-            axes[8 + i].set_ylabel("Angle (rad)")
+            axes[8 + i].set_ylabel("Angle (deg)")
             axes[8 + i].grid(True)
 
         # compute RMSE for position
@@ -124,3 +128,74 @@ class EvalRecorder:
         plt.savefig(Path(__file__).parents[2] / "saves" / save_path)
 
         return fig
+
+
+def write_cylinder_obj(
+    path: str | Path, radius: float, height: float, n_theta: int = 128, n_h: int = 16, cap: bool = True
+) -> Path:
+    """
+    Create a triangulated cylinder mesh and write as .obj.
+    Local frame: cylinder axis along +Z, centered at origin, z in [-h/2, +h/2].
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    h2 = 0.5 * height
+    vis_ang = 45.0 * np.pi / 180.0
+    theta = np.linspace(np.pi - vis_ang, np.pi + vis_ang, n_theta, endpoint=False)
+    ct = np.cos(theta)
+    st = np.sin(theta)
+
+    # Rings along z
+    z = np.linspace(-h2, h2, n_h + 1)
+    verts = []
+    for zi in z:
+        ring = np.stack([radius * ct, radius * st, np.full_like(ct, zi)], axis=1)
+        verts.append(ring)
+    verts = np.concatenate(verts, axis=0)  # ((n_h+1)*n_theta, 3)
+
+    faces = []
+
+    def vid(i_ring: int, i_theta: int) -> int:
+        # OBJ is 1-based indexing
+        return 1 + i_ring * n_theta + (i_theta % n_theta)
+
+    # Side faces (two triangles per quad)
+    for i in range(n_h):
+        for j in range(n_theta):
+            v00 = vid(i, j)
+            v01 = vid(i, j + 1)
+            v10 = vid(i + 1, j)
+            v11 = vid(i + 1, j + 1)
+            faces.append((v00, v11, v10))
+            faces.append((v00, v01, v11))
+
+    if cap:
+        # Add top & bottom center vertices
+        v_bottom_center = len(verts) + 1
+        v_top_center = len(verts) + 2
+        verts = np.vstack([verts, [0.0, 0.0, -h2], [0.0, 0.0, h2]])
+
+        # Bottom cap (normal roughly -Z): fan triangles
+        i_ring_bottom = 0
+        for j in range(n_theta):
+            v0 = vid(i_ring_bottom, j)
+            v1 = vid(i_ring_bottom, j + 1)
+            faces.append((v_bottom_center, v1, v0))  # keep winding consistent
+
+        # Top cap (normal roughly +Z)
+        i_ring_top = n_h
+        for j in range(n_theta):
+            v0 = vid(i_ring_top, j)
+            v1 = vid(i_ring_top, j + 1)
+            faces.append((v_top_center, v0, v1))
+
+    # Write OBJ
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("# cylinder mesh\n")
+        for v in verts:
+            f.write(f"v {v[0]:.9g} {v[1]:.9g} {v[2]:.9g}\n")
+        for tri in faces:
+            f.write(f"f {tri[0]} {tri[1]} {tri[2]}\n")
+
+    return path
