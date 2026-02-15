@@ -100,8 +100,8 @@ class HFICController:
         tau_ctrl = np.zeros_like(q)
 
         # M(q)
-        M = pin.crba(self.model, self.data, q)
-        M_inv = np.linalg.inv(M)
+        # M = pin.crba(self.model, self.data, q)
+        M_inv = pin.computeMinverse(self.model, self.data, q)
         M_x = np.linalg.inv(J_motion @ M_inv @ J_motion.T)
         Lambda_force = np.linalg.inv(J_force @ M_inv @ J_force.T + 1e-6 * np.eye(1))
         # C(q, dq)
@@ -138,8 +138,8 @@ class HFICController:
         x_des = np.concatenate([pos_des[:2], np.zeros_like(eR)])
         x_tilde = x - x_des
         dx = J_motion @ dq  # (5,)
-        d_x_des = np.concatenate([vel_des[:2], np.zeros(3)])
-        dx_tilde = dx - d_x_des
+        dx_des = np.concatenate([vel_des[:2], np.zeros(3)])
+        dx_tilde = dx - dx_des
         dd_x_des = np.concatenate([acc_des[:2], np.zeros(3)])
 
         F_imp = M_x @ dd_x_des - self.kp[motion_idx] * x_tilde - self.kd[motion_idx] * dx_tilde
@@ -170,7 +170,7 @@ class HFICController:
         # Record data with batch dimension (1, dim)
         position = info.get("ee_task_pos", obs["ee_pos"])
         quat = info.get("ee_task_quat", obs["ee_quat"])
-        quat = obs["ee_quat"] # plot world frame
+        quat = obs["ee_quat"]  # plot world frame
         idx = min(self.steps, self.trajectory.shape[0] - 1)
         goal = self.trajectory[idx].copy()
         pry = R.from_quat(quat).as_euler("yxz")
