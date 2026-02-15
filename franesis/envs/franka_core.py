@@ -37,6 +37,7 @@ class FrankaCore:
                 enable_collision=True,
                 enable_joint_limit=True,
                 constraint_timeconst=0.1,
+                use_gjk_collision=True,
                 iterations=100,
                 noslip_iterations=0,
             ),
@@ -132,7 +133,7 @@ class FrankaCore:
     def _get_ee_pose(self) -> torch.Tensor:
         pos, quat = self._ee_link.get_pos(), self._ee_link.get_quat()  # (w, x, y, z)
         return pos, torch.roll(quat, shifts=-1, dims=-1)  # (x, y, z, w)
-    
+
     def _get_jacobian_ee(self) -> torch.Tensor:
         return self.robot.get_jacobian(link=self._ee_link)
 
@@ -179,8 +180,8 @@ class FrankaCore:
 
         # Link pose in world frame
         p_link = link_paddle.get_pos().squeeze()  # [3]
-        q_link = link_paddle.get_quat().squeeze()  # [4] (x, y, z, w)
-        q_inv = torch.tensor([-q_link[0], -q_link[1], -q_link[2], q_link[3]], device=gs.device, dtype=gs.tc_float)
+        q_link = link_paddle.get_quat().squeeze()  # [4] (w, x, y, z)
+        q_inv = torch.tensor([q_link[0], -q_link[1], -q_link[2], -q_link[3]], device=gs.device, dtype=gs.tc_float)
 
         # All contacts involving this robot
         c = self.robot.get_contacts()
@@ -209,4 +210,5 @@ class FrankaCore:
         Fl = transform_by_quat(Fw, q_inv)
         Tl = transform_by_quat(Tw, q_inv)
         n = int(mask_a.sum().item() + mask_b.sum().item())
+
         return Fw, Tw, Fl, Tl, n

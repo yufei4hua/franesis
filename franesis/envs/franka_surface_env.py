@@ -55,11 +55,13 @@ class FrankaSurfaceEnv(FrankaCore):
         cylinder_radius: float,
         ee_pos: torch.Tensor,
         ee_quat: torch.Tensor,
+        ee_F_ext: torch.Tensor,
         ee_jacobian: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
         # 0. convert to numpy and assume single env
         ee_pos = ee_pos.detach().cpu().numpy()[0]
         ee_quat = ee_quat.detach().cpu().numpy()[0]
+        ee_F_ext = ee_F_ext.detach().cpu().numpy()[0]
         J = ee_jacobian.detach().cpu().numpy()[0]
         Jv = J[0:3, :]  # linear
         Jw = J[3:6, :]  # angular
@@ -85,9 +87,10 @@ class FrankaSurfaceEnv(FrankaCore):
         z_t = np.array([0.0, yr, zr]) / r
         y_t = np.cross(z_t, x_t)
         y_t = y_t / np.linalg.norm(y_t)
-        R_w_t = np.column_stack([x_t, y_t, z_t]) # world2tangent
+        R_w_t = np.column_stack([x_t, y_t, z_t])  # world2tangent
         R_task = R_w_t.T @ R_act
         ee_task_quat = R.from_matrix(R_task).as_quat()
+        ee_task_F_ext = np.concatenate([R_w_t.T @ ee_F_ext[..., :3], R_w_t.T @ ee_F_ext[..., 3:6]], axis=-1)
 
         # 3. task position Jacobian
         d = yr**2 + zr**2
@@ -118,6 +121,7 @@ class FrankaSurfaceEnv(FrankaCore):
             "ee_jacobian": torch.from_numpy(J).unsqueeze(0),
             "ee_task_pos": torch.from_numpy(ee_task_pos).unsqueeze(0),
             "ee_task_quat": torch.from_numpy(ee_task_quat).unsqueeze(0),
+            "ee_task_F_ext": torch.from_numpy(ee_task_F_ext).unsqueeze(0),
             "ee_jacobian_task": torch.from_numpy(J_task).unsqueeze(0),
             "ee_jacobian_force": torch.from_numpy(J_force).unsqueeze(0),
             "ee_jacobian_motion": torch.from_numpy(J_motion).unsqueeze(0),
@@ -152,12 +156,14 @@ class FrankaSurfaceEnv(FrankaCore):
 
     def info(self) -> dict:
         ee_pos, ee_quat = self._get_ee_pose()
+        ee_F_ext = self._get_ee_F_ext()
         ee_jacobian = self._get_jacobian_ee()
         info_dict = self._task_jocobians(
             center=self.center,
             cylinder_radius=self.radius,
             ee_pos=ee_pos,
             ee_quat=ee_quat,
+            ee_F_ext=ee_F_ext,
             ee_jacobian=ee_jacobian,
         )
         return info_dict

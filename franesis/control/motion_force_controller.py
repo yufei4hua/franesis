@@ -28,8 +28,8 @@ class MotionForceController:
         self.eval_recorder = EvalRecorder()
 
         # 1. stiffness and damping gains
-        self.kp = np.array([1000.0] * 3 + [44.0] * 3)  # position stiffness
-        self.kd = np.array([120.0] * 3 + [20.0] * 3)  # velocity damping
+        self.kp = np.array([800.0] * 3 + [80.0] * 3)  # position stiffness
+        self.kd = np.array([80.0] * 3 + [8.0] * 3)  # velocity damping
         # nullspace control parameters
         self.kp_null = 100.0
         self.kd_null = 20.0
@@ -46,7 +46,7 @@ class MotionForceController:
         self.model = pin.buildModelFromMJCF(self.mjcf_path)
         self.data = self.model.createData()
 
-        # 3. desired setpoint (can be updated online in compute_control)
+        # 3. desired setpoint
         self.q_home = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
         # Figure-8 trajectory
         num_loops = 1
@@ -67,7 +67,7 @@ class MotionForceController:
         dd_y = -radius * np.sin(t) * t_dot**2
         dd_z = np.zeros_like(t)
         self.trajectory_acc = np.array([dd_x, dd_y, dd_z]).T
-        self.quat_des = R.from_euler("xyz", [0, 180, 0], degrees=True).as_quat()
+        self.quat_des = R.from_euler("yxz", [180, 0, 0], degrees=True).as_quat()
         self.force_des = np.array([0.0, 0.0, -40.0, 0.0, 0.0, 0.0])
 
     def compute_control(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None) -> NDArray[np.floating]:
@@ -131,7 +131,7 @@ class MotionForceController:
         tau_ctrl += J.T @ F_imp
 
         # 5. force control
-        F_ext = obs["F_ext"]
+        F_ext = info.get("ee_task_F_ext", obs["F_ext"])
         F_des = self.force_des
         dF_ext = (F_ext - self.last_F_ext) / self.dt
         self.last_F_ext = F_ext.copy()
@@ -146,11 +146,12 @@ class MotionForceController:
         """Record data and increment step counter."""
         # Record data with batch dimension (1, dim)
         position = info.get("ee_task_pos", obs["ee_pos"])
-        quat = info.get("ee_task_quat", obs["ee_quat"])
+        quat = obs["ee_quat"]  # info.get("ee_task_quat", obs["ee_quat"])
         idx = min(self.steps, self.trajectory.shape[0] - 1)
         goal = self.trajectory[idx].copy()
         pry = R.from_quat(quat).as_euler("yxz")
         rpy = np.array([pry[1], pry[0], pry[2]])
+        force = info.get("ee_task_F_ext", obs["F_ext"])
 
         action = info.get("actions", np.zeros((4,)))
         self.eval_recorder.record_step(
@@ -158,7 +159,7 @@ class MotionForceController:
             position=position[None, :],
             goal=goal[None, :],
             rpy=rpy[None, :],
-            force=obs["F_ext"][None, :3],
+            force=force[None, :3],
             goal_force=-self.force_des[None, :3],
         )
 

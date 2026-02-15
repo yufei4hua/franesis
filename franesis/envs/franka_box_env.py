@@ -50,7 +50,7 @@ class FrankaBoxEnv(FrankaCore):
         J = ee_jacobian  # (B, 6, n)
         J_force = J[..., 2:3, :]  # (B, 1, n)
         J_motion = torch.cat([J[..., :2, :], J[..., 3:, :]], dim=-2)  # (B, 5, n)
-        J_task = torch.cat([J_motion, J_force], dim=-2)  # (B, 6, n)
+        J_task = J  # (B, 6, n)
         _, _, Vh = torch.linalg.svd(J_task, full_matrices=True)
         J_null = Vh[..., -1:, :]  # (B, 1, n)
         J_null = J_null / torch.linalg.norm(J_null, dim=-1, keepdim=True).clamp_min(1e-12)

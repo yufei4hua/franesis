@@ -46,7 +46,7 @@ class HFICController:
         self.model = pin.buildModelFromMJCF(self.mjcf_path)
         self.data = self.model.createData()
 
-        # 3. desired setpoint (can be updated online in compute_control)
+        # 3. desired setpoint
         self.q_home = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
         # Figure-8 trajectory
         num_loops = 2
@@ -128,20 +128,19 @@ class HFICController:
         R_delta = R_des.T @ R_act  # compute SO(3) error
         eR = R.from_matrix(R_delta).as_rotvec()
         eR = R_act.T @ eR  # convert to world frame
-        print("eR:", eR)
 
         x_tilde = np.concatenate([pos - pos_des, eR])
         dx_tilde = dx - np.concatenate([vel_des, np.zeros(3)])
         F_imp = -self.kp * x_tilde - self.kd * dx_tilde
         tau_ctrl += J.T @ F_imp
 
-        # # 5. force control
-        # F_ext = obs["F_ext"]
-        # F_des = self.force_des
-        # dF_ext = (F_ext - self.last_F_ext) / self.dt
-        # self.last_F_ext = F_ext.copy()
-        # F_force = F_des + self.kp_force * (F_ext + F_des) - self.kd_force * dF_ext
-        # tau_ctrl += J.T @ F_force
+        # 5. force control
+        F_ext = obs["F_ext"]
+        F_des = self.force_des
+        dF_ext = (F_ext - self.last_F_ext) / self.dt
+        self.last_F_ext = F_ext.copy()
+        F_force = F_des + self.kp_force * (F_ext + F_des) - self.kd_force * dF_ext
+        tau_ctrl += J.T @ F_force
 
         return tau_ctrl
 
@@ -156,6 +155,7 @@ class HFICController:
         goal = self.trajectory[idx].copy()
         pry = R.from_quat(quat).as_euler("yxz")
         rpy = np.array([pry[1], pry[0], pry[2]])
+        force = info.get("ee_task_F_ext", obs["F_ext"])
 
         action = info.get("actions", np.zeros((4,)))
         self.eval_recorder.record_step(
@@ -163,7 +163,7 @@ class HFICController:
             position=position[None, :],
             goal=goal[None, :],
             rpy=rpy[None, :],
-            force=obs["F_ext"][None, :3],
+            force=force[None, :3],
             goal_force=-self.force_des[None, :3],
         )
 
