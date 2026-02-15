@@ -1,8 +1,8 @@
-# Franka Robot Arm Control Based on Genesis
+# Motion Force Control of Franka Robot Arm Based on Genesis Simulation
 
 ## Overview
 
-This is a course project for ARCL (Advanced Robot Control and Learning). The task is decoupled force and motion control.
+This is a course project for ARCL (Advanced Robot Control and Learning). This repo focused on decoupled force and motion control.
 
 This repository implemented a simple gym style environment of franka emika panda simulated with Genesis. 
 
@@ -30,11 +30,13 @@ pixi shell
 Default cartesian impedance controller.
 ```bash
 python scripts/sim.py -e default -c imp
+python scripts/sim.py -e box -c imp
 ```
 ### Motion Force Controller
 Cartesian impedance controller with explicit force PD control.
 ```bash
 python scripts/sim.py -e box -c mfc
+python scripts/sim.py -e surface -c mfc
 ```
 ### Hybrid Force Impedance Controller
 Implementation of the HFIC paper, compensates motion generated theoretical force.

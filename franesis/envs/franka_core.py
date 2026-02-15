@@ -47,8 +47,8 @@ class FrankaCore:
             ),
             viewer_options=gs.options.ViewerOptions(
                 max_FPS=int(0.5 / self.ctrl_dt),
-                camera_pos=(1.0, 0.0, 1.8),
-                camera_lookat=(0.0, 0.0, 0.0),
+                camera_pos=(1.2, 0.0, 1.8),
+                camera_lookat=(0.0, 0.0, 0.1),
                 camera_fov=30,
             ),
             profiling_options=gs.options.ProfilingOptions(show_FPS=False),
