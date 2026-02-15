@@ -47,14 +47,14 @@ class CartesianImpedanceController:
         # 3. desired setpoint (can be updated online in compute_control)
         # Figure-8 trajectory
         num_loops = 2
-        self.trajectory_time = 5 * num_loops
+        self.trajectory_time = 3.0 * num_loops
         n_steps = int(np.ceil(self.trajectory_time * self.freq))
         t = np.linspace(0, 2 * np.pi * num_loops, n_steps)
         radius = 0.2  # Radius for the circles
         t_dot = 2 * np.pi * num_loops / self.trajectory_time
         x = radius / 2 * np.sin(2 * t) + 0.3
         y = radius * np.sin(t) + 0.0
-        z = np.zeros_like(t) + 0.48
+        z = np.zeros_like(t) + 0.3
         self.trajectory = np.array([x, y, z]).T
         d_x = radius * np.cos(2 * t) * t_dot
         d_y = radius * np.cos(t) * t_dot
@@ -88,16 +88,6 @@ class CartesianImpedanceController:
         pos_des = self.trajectory[idx]
         vel_des = self.trajectory_vel[idx]
         tau_ctrl = np.zeros_like(q)
-
-        # M(q)
-        M = pin.crba(self.model, self.data, q)
-        M = 0.5 * (M + M.T)  # force symmetry
-
-        # # C(q, dq)
-        # C = pin.computeCoriolisMatrix(self.model, self.data, q, dq)
-        # Cdq = C @ dq
-        # # g(q)
-        # g = pin.computeGeneralizedGravity(self.model, self.data, q)
 
         # 2. compansate for nonlinear effects
         # nonlinear effects = C*dq + g
