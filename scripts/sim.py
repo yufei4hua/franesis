@@ -4,7 +4,7 @@ import fire
 import genesis as gs  # noqa: F401
 import numpy as np
 
-from franesis.control import CartesianImpedanceController, HFICController, MotionForceController
+from franesis.control import CartesianImpedanceController, HFICController, MotionForceController, PDIMFCController
 from franesis.envs.franka_box_env import FrankaBoxEnv
 from franesis.envs.franka_env import FrankaEnv
 from franesis.envs.franka_sphere_env import FrankaSphereEnv
@@ -19,6 +19,8 @@ def main(environment: str = "default", controller: str = "imp", n_runs: int = 1,
             controller_cls = MotionForceController
         case "hfic":
             controller_cls = HFICController
+        case "pdimfc":
+            controller_cls = PDIMFCController
         case _:
             raise ValueError(f"Unsupported controller: {controller}")
 
@@ -44,10 +46,6 @@ def main(environment: str = "default", controller: str = "imp", n_runs: int = 1,
             action = ctrl.compute_control(obs=obs, info=info)
             obs, _, done, info = env.step(action)
             ctrl.step_callback(action, obs, 0.0, done, info)
-            print("step:", env.steps[0].item())
-            # for k, v in obs.items():
-            #     print(f"{k}: {v}")
-            # print("done:", done)
 
     ctrl.episode_callback(exp_name=f"{environment}_{controller}")
 

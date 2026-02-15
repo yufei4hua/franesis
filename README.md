@@ -20,25 +20,33 @@ curl -fsSL https://pixi.sh/install.sh | sh
 
 ### One-line installation & activation
 
+Clone this repository and run:
+
 ```bash
 pixi shell
 ```
 ## Controllers
-### Cartesian impedance controller
+### Cartesian Impedance controller
+Default cartesian impedance controller.
 ```bash
 python scripts/sim.py -e default -c imp
 ```
-### Force Motion Controller
+### Motion Force Controller
+Cartesian impedance controller with explicit force PD control.
 ```bash
 python scripts/sim.py -e box -c mfc
 ```
 ### Hybrid Force Impedance Controller
+Implementation of the HFIC paper, compensates motion generated theoretical force.
 ```bash
 python scripts/sim.py -e box -c hfic
+python scripts/sim.py -e surface -c hfic
 ```
-### Partial Decoupled Controller
+### Partial Decoupled Impedance Motion Force Controller.
+Implementation of the PD-IMFC paper, shapes partial decoupled inertia.
 ```bash
 python scripts/sim.py -e box -c pdimfc
+python scripts/sim.py -e surface -c pdimfc
 ```
 
 
