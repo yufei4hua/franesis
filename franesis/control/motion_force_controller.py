@@ -35,8 +35,8 @@ class MotionForceController:
         self.kd_null = 20.0
         self.last_F_ext = obs["F_ext"].copy()
         # force control parameters
-        self.kp_force = 1.2
-        self.kd_force = 0.003
+        self.kp_force = np.array([0.0, 0.0, 3.0] + [0.0] * 3)
+        self.kd_force = np.array([0.0, 0.0, 0.002] + [0.0] * 3)
 
         # 2. import robot model with Pinocchio for kinematics/dynamics computations
         self.mjcf_path = info.get("mjcf_path", "franesis/envs/franka_emika_panda/panda_cylinder.xml")
@@ -68,7 +68,7 @@ class MotionForceController:
         dd_z = np.zeros_like(t)
         self.trajectory_acc = np.array([dd_x, dd_y, dd_z]).T
         self.quat_des = R.from_euler("yxz", [180, 0, 0], degrees=True).as_quat()
-        self.force_des = np.array([0.0, 0.0, -40.0, 0.0, 0.0, 0.0])
+        self.force_des = np.array([0.0, 0.0, -10.0, 0.0, 0.0, 0.0])
 
     def compute_control(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None) -> NDArray[np.floating]:
         """Compute the next desired collective thrust and roll/pitch/yaw of the drone.
@@ -94,13 +94,6 @@ class MotionForceController:
 
         # M(q)
         M = pin.crba(self.model, self.data, q)
-        M = 0.5 * (M + M.T)  # force symmetry
-
-        # # C(q, dq)
-        # C = pin.computeCoriolisMatrix(self.model, self.data, q, dq)
-        # Cdq = C @ dq
-        # # g(q)
-        # g = pin.computeGeneralizedGravity(self.model, self.data, q)
 
         # 2. compansate for nonlinear effects
         # nonlinear effects = C*dq + g
