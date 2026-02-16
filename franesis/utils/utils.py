@@ -96,8 +96,9 @@ class EvalRecorder:
 
         # Force error
         force_err = np.linalg.norm(force[:, 0] - goal_force[:, 0], axis=1)
+        rmse_force = np.sqrt(np.mean(force_err**2))
         axes[7].plot(force_err)
-        axes[7].set_title("Force Error")
+        axes[7].set_title(f"Force Error (RMSE: {rmse_force:.3f} N)")
         axes[7].set_xlabel("Time Step")
         axes[7].set_ylabel("Error (N)")
         axes[7].grid(True)
