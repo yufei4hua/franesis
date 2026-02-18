@@ -52,13 +52,23 @@ class EvalRecorder:
         self._record_force.append(force)
         self._record_goal_force.append(goal_force)
 
-    def plot_eval(self, save_path: str = "eval_plot.png", traj_plane: list = [0, 1]) -> plt.Figure:
-        """Plot recorded traces and save to `save_path`."""
+    def plot_eval(
+        self, save_path: str = "eval_plot.png", traj_plane: list = [0, 1], save_data: bool = False
+    ) -> plt.Figure:
+        """Plot recorded traces and save to `save_path`.
+
+        Args:
+            save_path: Filename for the plot image.
+            traj_plane: Indices of the trajectory plane to plot.
+            save_data: If True, save recorded data to a CSV file with the same name as
+                `save_path` but with a .csv suffix.
+        """
         pos = np.array(self._record_pos)
         goal = np.array(self._record_goal)
         rpy = np.array(self._record_rpy)
         force = np.array(self._record_force)
         goal_force = np.array(self._record_goal_force)
+        act = np.array(self._record_act)
 
         fig, axes = plt.subplots(3, 4, figsize=(18, 12))
         axes = axes.flatten()
@@ -127,6 +137,41 @@ class EvalRecorder:
 
         plt.tight_layout()
         plt.savefig(Path(__file__).parents[2] / "saves" / save_path)
+
+        if save_data:
+            save_dir = Path(__file__).parents[2] / "saves"
+            save_dir.mkdir(parents=True, exist_ok=True)
+            csv_name = f"{Path(save_path).stem}.csv"
+            csv_path = save_dir / csv_name
+
+            def _flatten(x: NDArray) -> NDArray:
+                if x.size == 0:
+                    return x
+                return x.reshape(x.shape[0], -1)
+
+            act_f = _flatten(act)
+            pos_f = _flatten(pos)
+            goal_f = _flatten(goal)
+            rpy_f = _flatten(rpy)
+            force_f = _flatten(force)
+            goal_force_f = _flatten(goal_force)
+
+            parts = [pos_f, goal_f, rpy_f, force_f, goal_force_f]
+            headers = [
+                [f"pos_{i}" for i in range(pos_f.shape[1])],
+                [f"goal_{i}" for i in range(goal_f.shape[1])],
+                [f"rpy_{i}" for i in range(rpy_f.shape[1])],
+                [f"force_{i}" for i in range(force_f.shape[1])],
+                [f"goal_force_{i}" for i in range(goal_force_f.shape[1])],
+            ]
+
+            if act_f.size != 0:
+                parts.insert(0, act_f)
+                headers.insert(0, [f"act_{i}" for i in range(act_f.shape[1])])
+
+            data = np.concatenate(parts, axis=1)
+            header = ",".join(sum(headers, []))
+            np.savetxt(csv_path, data, delimiter=",", header=header, comments="")
 
         return fig
 

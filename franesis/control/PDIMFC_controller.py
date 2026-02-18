@@ -111,11 +111,7 @@ class PDIMFCController:
         dJdq = dJ_full @ dq
         dM = C + C.T
         dM_inv = -M_inv @ dM @ M_inv
-        dLambda_inv = (
-            dJ_mf @ M_inv @ J_mf.T
-            + J_mf @ dM_inv @ J_mf.T
-            + J_mf @ M_inv @ dJ_mf.T
-        )  # (6,6)
+        dLambda_inv = dJ_mf @ M_inv @ J_mf.T + J_mf @ dM_inv @ J_mf.T + J_mf @ M_inv @ dJ_mf.T  # (6,6)
 
         # 2. compansate for nonlinear effects
         # nonlinear effects = C*dq + g
@@ -133,15 +129,15 @@ class PDIMFCController:
         A = Lambda[:5, :5]
         B = Lambda[:5, 5:6]
         D = Lambda[5:6, 5:6]
-        Lambda_des[5:6, :5] = 0.0 # partial decoupling
+        Lambda_des[5:6, :5] = 0.0  # partial decoupling
         Lambda_des[5:6, 5:6] = D - B.T @ np.linalg.inv(A + 1e-6 * np.eye(5)) @ B
         Lambda_des_inv = np.linalg.inv(Lambda_des)
         Lambda_motion_des = Lambda_des[:5, :5]
         Lambda_couple_des = Lambda_des[:5, 5:6]
         Lambda_dot = -Lambda @ dLambda_inv @ Lambda  # (6,6)
         C_bar = 0.5 * Lambda_dot  # (6,6)
-        C_m = C_bar[:5, :5]       # (5,5)
-        C_f = C_bar[5:6, 5:6]     # (1,1)
+        C_m = C_bar[:5, :5]  # (5,5)
+        C_f = C_bar[5:6, 5:6]  # (1,1)
 
         # 4. cartesian impedance control (u_m)
         R_act = R.from_quat(quat).as_matrix()
@@ -162,9 +158,13 @@ class PDIMFCController:
         dd_x_m_des = dd_x_des[:5]
         dd_x_f_des = dd_x_des[5:6]
 
-        u_m = Lambda_motion_des @ dd_x_m_des + Lambda_couple_des @ dd_x_f_des \
-            - self.kp[motion_idx] * x_m_tilde - self.kd[motion_idx] * dx_m_tilde \
+        u_m = (
+            Lambda_motion_des @ dd_x_m_des
+            + Lambda_couple_des @ dd_x_f_des
+            - self.kp[motion_idx] * x_m_tilde
+            - self.kd[motion_idx] * dx_m_tilde
             + C_m @ dx_m_tilde
+        )
 
         # 5. force control (u_f)
         F_ext = info.get("ee_task_F_ext", obs["F_ext"])
@@ -174,14 +174,13 @@ class PDIMFCController:
         dF_ext = (F_ext - self.last_F_ext) / self.dt
         dF_f_ext = dF_ext[2:3]
         self.last_F_ext = F_ext.copy()
-        
-        u_f = F_des + self.kp_force[2:3] * (F_f_ext + F_des) - self.kd_force[2:3] * dF_f_ext \
-            + C_f.squeeze() * dx[5:6]
-        
+
+        u_f = F_des + self.kp_force[2:3] * (F_f_ext + F_des) - self.kd_force[2:3] * dF_f_ext + C_f.squeeze() * dx[5:6]
+
         # 6. shape inertia
         u = np.concatenate([u_m, u_f])  # (6,)
         F = Lambda @ (Lambda_des_inv @ u - dJdq) + (Lambda @ Lambda_des_inv - np.eye(6)) @ F_mf_ext
-        
+
         tau_ctrl += J_mf.T @ F
 
         return tau_ctrl

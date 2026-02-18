@@ -31,6 +31,7 @@ Default cartesian impedance controller.
 ```bash
 python scripts/sim.py -e default -c imp
 python scripts/sim.py -e box -c imp
+python scripts/sim.py -e surface -c imp
 ```
 ### Motion Force Controller
 Cartesian impedance controller with explicit force PD control.

@@ -52,9 +52,9 @@ class CartesianImpedanceController:
         t = np.linspace(0, 2 * np.pi * num_loops, n_steps)
         radius = 0.2  # Radius for the circles
         t_dot = 2 * np.pi * num_loops / self.trajectory_time
-        x = radius / 2 * np.sin(2 * t) + 0.3
+        x = radius / 2 * np.sin(2 * t)
         y = radius * np.sin(t) + 0.0
-        z = np.zeros_like(t) + 0.3
+        z = np.zeros_like(t)
         self.trajectory = np.array([x, y, z]).T
         d_x = radius * np.cos(2 * t) * t_dot
         d_y = radius * np.cos(t) * t_dot
@@ -80,8 +80,8 @@ class CartesianImpedanceController:
         # 1. prepare data
         q = obs["q"]
         dq = obs["dq"]
-        pos = obs["ee_pos"]
-        quat = obs["ee_quat"]
+        pos = info.get("ee_task_pos", obs["ee_pos"])
+        quat = info.get("ee_task_quat", obs["ee_quat"])
         J = info["ee_jacobian"]
         dx = J @ dq
         idx = min(self.steps, self.trajectory.shape[0] - 1)
@@ -114,9 +114,10 @@ class CartesianImpedanceController:
         """Record data and increment step counter."""
         # Record data with batch dimension (1, dim)
         idx = min(self.steps, self.trajectory.shape[0] - 1)
-        position = obs["ee_pos"].copy()
+        position = info.get("ee_task_pos", obs["ee_pos"])
+        quat = obs["ee_quat"]
         goal = self.trajectory[idx].copy()
-        rpy = R.from_quat(obs["ee_quat"]).as_euler("xyz")
+        rpy = R.from_quat(quat).as_euler("xyz")
 
         action = info.get("actions", np.zeros((4,)))
         self.eval_recorder.record_step(
