@@ -1,5 +1,11 @@
 # Motion Force Control of Franka Robot Arm Based on Genesis Simulation
 
+<p align="center">
+  <img src="saves/box_snapshot.png" width="45%" alt="Box Environment">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="saves/surface_snapshot.png" width="45%" alt="Surface Environment">
+</p>
+
 ## Overview
 
 This is a course project for ARCL (Advanced Robot Control and Learning). This repo focused on decoupled force and motion control.
