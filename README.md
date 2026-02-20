@@ -51,7 +51,7 @@ Implementation of the HFIC paper, compensates motion generated theoretical force
 python scripts/sim.py -e box -c hfic
 python scripts/sim.py -e surface -c hfic
 ```
-### Partial Decoupled Impedance Motion Force Controller.
+### Partial Decoupled Impedance Motion Force Controller (best)
 Implementation of the PD-IMFC paper, shapes partial decoupled inertia.
 ```bash
 python scripts/sim.py -e box -c pdimfc
